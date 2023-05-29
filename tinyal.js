@@ -222,11 +222,11 @@
 
 	function optionsExpressionFunc(data, expression, element) {
 		let baseElement = document.createElement('<option value="{{key}}">{{value}}</>');
-		const expression = evalExpressionFunc(expression);
+		const expressionFunc = evalExpressionFunc(expression);
 		return () => {
 			let inner = '';
 			try {
-				let items = expression.apply(data);
+				let items = expressionFunc.apply(data);
 				if (items instanceof Array) {
 					for (const item of items) {
 						const elementClone = baseElement.cloneNode(true);
@@ -422,13 +422,19 @@
 				}
 			}
 
-			for (const child of this.#node.children)
+			for (const child of element.children)
 				if (isTemplateNode(child))
 					this.#children.push(new TinyAlTemplateNode(this.#object, child));
 		}
 	}
+
+	class ExtendableProxy {
+		constructor() {
+			return new Proxy(this, staticRenderer);
+		}
+	}
 	
-	class TinyAlApp extends Proxy {
+	class TinyAlApp extends ExtendableProxy {
         #element = null;
         #template = [];
 		#lastRenderTime = 0;
@@ -458,8 +464,6 @@
 			}
 			
 			this.#template = new TinyAlTemplateNode(this, this.#element);
-
-			super({}, staticRenderer);
 		}
 
 		element() {
@@ -523,7 +527,7 @@
 	let staticTinyAl = new TinyAl();
 
 	if ('browser_module' in global) {
-        global['browser_module'].export('tinyal', () => staticTinyAl, false);
+        global['browser_module'].export('tinyal', () => staticTinyAl);
     } else {
         if ('tinyal' in global)
             console.warn('Module "tinyal" is already exported! Ignore loading!');
