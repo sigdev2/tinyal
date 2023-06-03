@@ -35,7 +35,7 @@
 		DIRECTIVE_KEYPRESS, DIRECTIVE_KEYUP, DIRECTIVE_MOUSEDOWN, DIRECTIVE_MOUSEUP, DIRECTIVE_MOUSEENTER,
 		DIRECTIVE_MOUSELEAVE, DIRECTIVE_MOUSEMOVE, DIRECTIVE_MOUSEOVER];
 
-	const BIND_RX = /\{\{([\}^]*)}}/gm;
+	const BIND_RX = /\{\{([^\}]*)\}\}/gm;
 	const FOR_VAR_NAME_RX = /^\s*(?:[A-z0-9_]+\s+)?(\[(?:[A-z0-9_\.]+\,?\s*)+\]|[_A-z0-9\.]+)(?:\s+in|\s+of|\s*;|\s*=|\s*$)/gm;
 
 	function bindEvents(data, element) {
@@ -89,11 +89,11 @@
 	}
 
 	function evalExpressionFunc(expression) {
-		return new Function('return () => { return (' + expression + '); }')();
+		return new Function('return function() { return (' + expression + '); }')();
 	}
 
 	function forExpressionFunc(expression, itemNames) {
-		return new Function('return (bodyFunc) => { for (' + expression + ') { bodyFunc.apply(' + itemNames + ') }; }')();
+		return new Function('return function(bodyFunc) { for (' + expression + ') { bodyFunc.apply(' + itemNames + ') }; }')();
 	}
 
 	function textExpressionFunc(data, template, element) {
@@ -130,7 +130,7 @@
 		data = new Proxy(data, staticReadOnly);
         return () => {
 			try {
-			    return Boolean(expression.apply(data));
+			    return Boolean(evalExpressionFunc(code).apply(data));
 			} catch(e) {
 				console.warn(e.message);
 			}
@@ -195,7 +195,7 @@
 		let args = parseForArgumentsValues(itemNames);
 
 		const items = [];
-		for (const child of element.children)
+		for (const child of element.childNodes)
 		    items.push(child.cloneNode(true));
 
 		const forExpression = forExpressionFunc(expression);
@@ -260,7 +260,7 @@
 
 	function innerifExpressionFunc(data, expression, element) {
 		const items = [];
-		for (const child of element.children) {
+		for (const child of element.childNodes) {
 			const elementClone = child.cloneNode(true);
 			items.push([elementClone, new TinyAlTemplateNode(data, elementClone)]);
 		}
@@ -280,7 +280,7 @@
 	function parseInitDirective(json, obj) {
 		try {
 			let attrs = JSON.parse(json);
-			for (const [attr, val] of attrs)
+			for (const [attr, val] of Object.entries(attrs))
 			    obj[attr] = val;
 		} catch(e) {
 			console.warn('Can\'t parse init as json!');
@@ -290,11 +290,7 @@
 	class TinyAlRenderer {
 		set(app, attr, value) {
             app[attr] = value;
-			this.render(app);
-		}
-
-		render() {
-            app.render()
+			app.render();
 		}
 	}
 	
@@ -328,28 +324,28 @@
 		constructor(obj, element) {
 			if (!isTemplateNode(element))
 			    return;
-
-			const subApp = element.hasAttribute(DIRECTIVE_APP);
-			const subControl = element.hasAttribute(DIRECTIVE_CONTROLLER);
-			if (subApp || subControl) {
-				const appName = (subApp ? element.getAttribute(DIRECTIVE_APP) : element.getAttribute(DIRECTIVE_CONTROLLER));
-				if (appName in obj)
-				    obj = obj[appName];
-			}
-
-            this.#object = obj;
-			
 			if (element.nodeType == Node.TEXT_NODE) {
+				this.#object = obj;
 				this.#text = true;
 				if (BIND_RX.test(element.nodeValue)) {
 					this.#template = textExpressionFunc(this.#object, element.nodeValue);
 					element.nodeValue = '';
 				}
-			} else {
+			} else {	
+				const subApp = element.hasAttribute(DIRECTIVE_APP);
+				const subControl = element.hasAttribute(DIRECTIVE_CONTROLLER);
+				if (subApp || subControl) {
+					const appName = (subApp ? element.getAttribute(DIRECTIVE_APP) : element.getAttribute(DIRECTIVE_CONTROLLER));
+					if (appName in obj)
+						obj = obj[appName];
+				}
+
+				this.#object = obj;
+				
 			    this.#nodeName = element.name;
 				
 				for (const attr of element.attributes)
-					if (attr.specified && attrib.name.startsWith('ng-') && BIND_RX.test(attr.value))
+					if (attr.specified && attr.name.startsWith('ng-') && BIND_RX.test(attr.value))
 						this.#modifyers.push(textAttributeExpressionFunc(this.#object, attr.name, attr.value, element));
 
 				bindEvents(this.#object, element);
@@ -398,7 +394,7 @@
 				if (this.#parseInnerHtmlDirective(DIRECTIVE_CHILDREN, childrenExpressionFunc, element))
 					return;
 
-				for (const child of element.children)
+				for (const child of element.childNodes)
 					if (isTemplateNode(child))
 						this.#children.push(new TinyAlTemplateNode(this.#object, child));
 			}
@@ -408,7 +404,7 @@
             if (!isTemplateNode(element))
 			    return;
 
-			const text = this.#text && element.nodeType == Node.TEXT_NODE();
+			const text = this.#text && element.nodeType == Node.TEXT_NODE;
 			const node = this.#nodeName == element.name && element.nodeType == Node.ELEMENT_NODE;
 			if (text || node) {
 				for (const mod of this.#modifyers)
@@ -422,19 +418,17 @@
 				}
 			}
 
-			for (const child of element.children)
-				if (isTemplateNode(child))
-					this.#children.push(new TinyAlTemplateNode(this.#object, child));
-		}
-	}
-
-	class ExtendableProxy {
-		constructor() {
-			return new Proxy(this, staticRenderer);
+			let pos = 0;
+			for (const child of element.childNodes) {
+				if (!isTemplateNode(child))
+				    continue;
+				this.#children[pos].merge(child);
+				pos += 1;
+			}
 		}
 	}
 	
-	class TinyAlApp extends ExtendableProxy {
+	class TinyAlApp {
         #element = null;
         #template = [];
 		#lastRenderTime = 0;
@@ -464,6 +458,7 @@
 			}
 			
 			this.#template = new TinyAlTemplateNode(this, this.#element);
+			this.render();
 		}
 
 		element() {
@@ -475,63 +470,91 @@
 		}
 
 		render() {
-			if (this.#renderQueue) {
-				let diff = this.#lastRenderTime - Date.now();
-				let self = this;
+			if (!this.#renderQueue) {
+				let diff = Date.now() - this.#lastRenderTime;
 				if (diff >= this.#renderTime) {
 					window.requestAnimationFrame((msec) => {
-						self.#lastRenderTime = msec;
-						self.#template.merge(self.#element);
+						this.#lastRenderTime = msec;
+						this.#template.merge(this.#element);
 					});
 				} else {
                     this.#renderQueue = true;
 					setTimeout(() => {
-						self.#renderQueue = false;
-                        self.render();
+						this.#renderQueue = false;
+                        this.render();
 					});
 				}
 		    }
 		}
 	}
 
+	
+	class TinyAlAppProxy extends TinyAlApp {
+		constructor(element) {
+			super(element);
+			return new Proxy(this, staticRenderer);
+		}
+	}
+
 	class TinyAl {
         #apps = new Map();
 
-        constructor() {
-			document.addEventListener('DOMContentLoaded', () => {
-				let apps = document.querySelectorAll('*:not([' + DIRECTIVE_APP + ']) *[' + DIRECTIVE_APP + '], *:not([' + DIRECTIVE_CONTROLLER + ']) *[' + DIRECTIVE_APP + ']');
-				for (const app of apps) {
-				    let name = app.getAttribute(DIRECTIVE_APP);
-					if (!name)
-						do {
-							name = uuidv4();
-						} while(this.#apps.has(name));
-					this.add(name, app);
-				}
-			});
+        constructor() { }
+
+		init() {
+			let apps = document.querySelectorAll('*:not([' + DIRECTIVE_APP + ']) *[' + DIRECTIVE_APP + '], *:not([' + DIRECTIVE_CONTROLLER + ']) *[' + DIRECTIVE_APP + ']');
+			for (const app of apps)
+				this.add(app);
 		}
 
 		find(appId) {
 			return this.#apps[appId];
 		}
 
-		add(appId, template) {
-			if (this.#apps.has(appId)) {
-			    this.#apps[appId].push(new TinyAlApp(template));
-			} else {
-			    this.#apps[appId] = [new TinyAlApp(template)];
+		add(template, appId = null) {
+			if (!appId) {
+				let name = template.getAttribute(DIRECTIVE_APP);
+				if (!name)
+					do {
+						name = uuidv4();
+					} while(this.#apps.has(name));
+				appId = name;
 			}
+
+			let app = new TinyAlAppProxy(template);
+
+			if (this.#apps.has(appId)) {
+			    this.#apps[appId].push(app);
+			} else {
+			    this.#apps[appId] = [app];
+			}
+			
+			return app;
 		}
 	}
 
 	let staticTinyAl = new TinyAl();
 
+	function addGlobalStyle() {
+        var css = '.ng-hide { display: none; } .ng-show { display: initial; }',
+			head = document.head || document.getElementsByTagName('head')[0],
+			style = document.createElement('style');
+
+		head.appendChild(style);
+		style.appendChild(document.createTextNode(css));
+	}
+
 	if ('browser_module' in global) {
-        global['browser_module'].export('tinyal', () => staticTinyAl);
+        global['browser_module'].export('tinyal', () => {
+			addGlobalStyle();
+			return staticTinyAl;
+		});
     } else {
-        if ('tinyal' in global)
+        if ('tinyal' in global) {
             console.warn('Module "tinyal" is already exported! Ignore loading!');
-        else
+		} else {
+			addGlobalStyle();
             global['tinyal'] = staticTinyAl;
+		}
     }
 })(this);
