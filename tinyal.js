@@ -43,7 +43,7 @@
 			if (element.hasAttribute(eventAttr)) {
 				const code = element.getAttribute(eventAttr);
 				element.removeAttribute(eventAttr);
-				const eventName = eventAttr.replace('ng-');
+				const eventName = eventAttr.replace('ng-', '');
 				element.addEventListener(eventName, () => {
 					try {
 						const ret = evalExpressionFunc(code).apply(data);
