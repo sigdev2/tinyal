@@ -420,7 +420,7 @@
 
 			let pos = 0;
 			for (const child of element.childNodes) {
-				if (!isTemplateNode(child))
+				if (!isTemplateNode(child) || this.#children[pos] === undefined)
 				    continue;
 				this.#children[pos].merge(child);
 				pos += 1;
