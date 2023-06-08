@@ -522,6 +522,7 @@
 			}
 
 			let app = new TinyAlAppProxy(template);
+			template.style.display = null;
 
 			if (this.#apps.has(appId)) {
 			    this.#apps[appId].push(app);
