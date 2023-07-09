@@ -563,12 +563,14 @@
 				}
 				customElements.define(tag, () => {
 					let component = new WebComponentProxy(arguments);
+					template.style.display = 'none';
 					component.setTemplate(template);
 					let app = this.add(component, null, false);
 					if (app != null)
 						for (const [key, value] of props)
 							if (!(key in app))
 								app[key] = value;
+					template.style.display = null;
 					return component;
 				});
 				return null;
@@ -602,7 +604,6 @@
 				appId = this.#gnerateAppId();
 
 			let app = new TinyAlAppProxy(template, shadowDom);
-			template.style.display = null;
 
 			if (this.#apps.has(appId)) {
 			    this.#apps[appId].push(app);

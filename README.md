@@ -5,7 +5,7 @@ Tiny angular like pure js library
 
     tinyal.add({
         tag: 'custom-tag',
-        css: 'color: #test',
+        css: 'div { color: #test; }',
         value: 10,
         html: `<div>
                    Test component with value {{10}}
