@@ -523,7 +523,6 @@
 		}
 	}
 
-	
 	class TinyAlAppProxy extends TinyAlApp {
 		constructor(element, shadowDom = false) {
 			super(element, shadowDom);
