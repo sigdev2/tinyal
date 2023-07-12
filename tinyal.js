@@ -313,12 +313,81 @@
 
 		return 0;
 	}
+	
+	const staticArrayMethods = new Set('pop', 'push', 'shift', 'unshift', 'splice', 'reverse', 'sort');
+
+	class TinyAlChildArrayRenderer {
+        #app = null;
+
+		constructor(app) {
+			this.#app = app;
+		}
+
+		set(arr, attr, value) {
+            const result = Reflect.set(arr, attr, value);
+			if (result && this.#app)
+			    this.#app.render();
+			return result;
+		}
+
+		get(arr, attr) {
+            if (attr in staticArrayMethods) {
+				return function() {
+					const result = arr[attr].apply(arr, arguments);
+					if (this.#app)
+						this.#app.render();
+                    return result;
+				}
+			}
+
+			const item = Reflect.get(arr, attr);
+			if (item.constructor.name === 'Object')
+				return new Proxy(item, new TinyAlChildObjectRenderer(this.#app))
+			if (item.constructor.name === 'Array')
+				return new Proxy(item, new TinyAlChildArrayRenderer(this.#app))
+			return item;
+		}
+	}
+
+	class TinyAlChildObjectRenderer {
+        #app = null;
+
+		constructor(app) {
+			this.#app = app;
+		}
+
+		set(obj, attr, value) {
+            const result = Reflect.set(obj, attr, value);
+			if (result && this.#app)
+			    this.#app.render();
+			return result;
+		}
+
+		get(obj, attr) {
+			const item = Reflect.get(obj, attr);
+			if (item.constructor.name === 'Object')
+				return new Proxy(item, new TinyAlChildObjectRenderer(this.#app))
+			if (item.constructor.name === 'Array')
+				return new Proxy(item, new TinyAlChildArrayRenderer(this.#app))
+			return item;
+		}
+	}
 
 	class TinyAlRenderer {
 		set(app, attr, value) {
-            app[attr] = value;
-			app.render();
-			return true;
+            const result = Reflect.set(app, attr, value);
+			if (result)
+			    app.render();
+			return result;
+		}
+
+		get(app, attr) {
+			const item = Reflect.get(app, attr);
+			if (item.constructor.name === 'Object')
+				return new Proxy(item, new TinyAlChildObjectRenderer(app))
+			if (item.constructor.name === 'Array')
+				return new Proxy(item, new TinyAlChildArrayRenderer(app))
+			return item;
 		}
 	}
 	
