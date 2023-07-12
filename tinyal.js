@@ -27,16 +27,20 @@
 	const DIRECTIVE_MOUSELEAVE = 'ng-mouseleave';
 	const DIRECTIVE_MOUSEMOVE = 'ng-mousemove';
 	const DIRECTIVE_MOUSEOVER = 'ng-mouseover';
+	const DIRECTIVE_TOUCHSTART = 'ng-touchstart';
+	const DIRECTIVE_TOUCHMOVE = 'ng-touchmove';
 
 	const DIRECTIVE_CHILDREN = 'ng-children';
 	const DIRECTIVE_INNERIF = 'ng-innerif';
 
 	const events = [DIRECTIVE_CLICK, DIRECTIVE_DBLCHANGE, DIRECTIVE_CHANGE, DIRECTIVE_FOCUS, DIRECTIVE_KEYDOWN,
 		DIRECTIVE_KEYPRESS, DIRECTIVE_KEYUP, DIRECTIVE_MOUSEDOWN, DIRECTIVE_MOUSEUP, DIRECTIVE_MOUSEENTER,
-		DIRECTIVE_MOUSELEAVE, DIRECTIVE_MOUSEMOVE, DIRECTIVE_MOUSEOVER];
+		DIRECTIVE_MOUSELEAVE, DIRECTIVE_MOUSEMOVE, DIRECTIVE_MOUSEOVER, DIRECTIVE_TOUCHSTART, DIRECTIVE_TOUCHMOVE];
 
 	const BIND_RX = /\{\{([^\}]*)\}\}/gm;
 	const FOR_VAR_NAME_RX = /^\s*(?:[A-z0-9_]+\s+)?(\[(?:[A-z0-9_\.]+\,?\s*)+\]|[_A-z0-9\.]+)(?:\s+in|\s+of|\s*;|\s*=|\s*$)/gm;
+
+	const DEFAULT_RENDER_TIMEOUT = 16; // 60 FPS
 
 	function bindEvents(data, element) {
         for (const eventAttr of events) {
@@ -44,9 +48,9 @@
 				const code = element.getAttribute(eventAttr);
 				element.removeAttribute(eventAttr);
 				const eventName = eventAttr.replace('ng-', '');
-				element.addEventListener(eventName, () => {
+				element.addEventListener(eventName, (e) => {
 					try {
-						const ret = evalExpressionFunc(code).apply(data);
+						const ret = evalExpressionFunc(code).apply(data, [e]);
 						if (typeof ret == 'function')
 							ret.apply(element);
 					} catch(e) {
@@ -299,7 +303,7 @@
 
 	function prepareAppAttributes(element, props) {
 		if (element.nodeType != Node.ELEMENT_NODE)
-		    return 0;
+		    return DEFAULT_RENDER_TIMEOUT;
 		element.removeAttribute(DIRECTIVE_APP);
 		if (element.hasAttribute(DIRECTIVE_INIT)) {
 			parseInitDirective('{' + element.getAttribute(DIRECTIVE_INIT) + '}', props);
@@ -311,7 +315,7 @@
 			return renderTime;
 		}
 
-		return 0;
+		return DEFAULT_RENDER_TIMEOUT;
 	}
 	
 	const staticArrayMethods = new Set('pop', 'push', 'shift', 'unshift', 'splice', 'reverse', 'sort');
@@ -333,7 +337,7 @@
 		get(arr, attr) {
             if (attr in staticArrayMethods) {
 				return function() {
-					const result = arr[attr].apply(arr, arguments);
+					const result = Reflect.get(arr, attr).apply(arr, arguments);
 					if (this.#app)
 						this.#app.render();
                     return result;
@@ -534,7 +538,7 @@
         #element = null;
         #template = [];
 		#lastRenderTime = 0;
-		#renderTimeout = 0;
+		#renderTimeout = DEFAULT_RENDER_TIMEOUT;
 		#renderQueue = false;
 		#appId = '';
 
@@ -578,7 +582,7 @@
 						setTimeout(() => {
 							self.#renderQueue = false;
 							self.render();
-						});
+						}, 1);
 					}
 				}
 			}
