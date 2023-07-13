@@ -459,7 +459,8 @@
 				
 			    this.#nodeName = element.name;
 
-				bindEvents(this.#object, element);
+				const bindContext = (this.#object instanceof TinyAlApp ? new Proxy(this.#object, staticRenderer) : this.#object);
+				bindEvents(bindContext, element);
 
 				if (element.hasAttribute(DIRECTIVE_SHOW)) {
 					this.#modifyers.push(showExpressionFunc(this.#object, element.getAttribute(DIRECTIVE_SHOW), element));
