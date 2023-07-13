@@ -42,6 +42,19 @@
 
 	const DEFAULT_RENDER_TIMEOUT = 16; // 60 FPS
 
+	function getStyles() {
+        return '.ng-hide { display: none !important; } .ng-show { display: initial !important; }';
+	}
+
+	function addGlobalStyle() {
+        const css = getStyles(),
+			head = document.head || document.getElementsByTagName('head')[0],
+			style = document.createElement('style');
+
+		head.appendChild(style);
+		style.appendChild(document.createTextNode(css));
+	}
+
 	function bindEvents(data, element) {
         for (const eventAttr of events) {
 			if (element.hasAttribute(eventAttr)) {
@@ -629,6 +642,7 @@
 			if (tag != null) {
 				let template = document.createElement('template');
 				if (render.length > 0) {
+					render += '<style>' + getStyles() + '</style>';
 					template.innerHTML = render;
 				}
 				const creator = this;
@@ -660,6 +674,7 @@
 		}
 
 		init() {
+			addGlobalStyle();
 			const apps = document.querySelectorAll('*:not([' + DIRECTIVE_APP + ']) *[' + DIRECTIVE_APP + '], *:not([' + DIRECTIVE_CONTROLLER + ']) *[' + DIRECTIVE_APP + ']');
 			for (const app of apps)
 				this.add(app);
@@ -703,25 +718,14 @@
 
 	const staticTinyAl = new TinyAl();
 
-	function addGlobalStyle() {
-        const css = '.ng-hide { display: none; } .ng-show { display: initial; }',
-			head = document.head || document.getElementsByTagName('head')[0],
-			style = document.createElement('style');
-
-		head.appendChild(style);
-		style.appendChild(document.createTextNode(css));
-	}
-
 	if ('browser_module' in global) {
         global['browser_module'].export('tinyal', () => {
-			addGlobalStyle();
 			return staticTinyAl;
 		});
     } else {
         if ('tinyal' in global) {
             console.warn('Module "tinyal" is already exported! Ignore loading!');
 		} else {
-			addGlobalStyle();
             global['tinyal'] = staticTinyAl;
 		}
     }
