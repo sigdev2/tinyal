@@ -422,6 +422,15 @@
 			return false;
 		}
 
+		#parseTextAttributes(element) {
+			for (const attr of element.attributes) {
+				if (attr.specified && attr.name.startsWith('ng-') && BIND_RX.test(attr.value)) {
+					this.#modifyers.push(textAttributeExpressionFunc(this.#object, attr.name.slice(3), attr.value, element));
+					element.removeAttribute(attr.name);
+				}
+			}
+		}
+
 		constructor(obj, element) {
 			if (!isTemplateNode(element))
 			    return;
@@ -449,10 +458,6 @@
 				this.#object = obj;
 				
 			    this.#nodeName = element.name;
-				
-				for (const attr of element.attributes)
-					if (attr.specified && attr.name.startsWith('ng-') && BIND_RX.test(attr.value))
-						this.#modifyers.push(textAttributeExpressionFunc(this.#object, attr.name, attr.value, element));
 
 				bindEvents(this.#object, element);
 
@@ -483,26 +488,29 @@
 								element.value = val;
 						})
 					}
+				}
 
+				do {
 					if (input)
-						return;
-				}
+						break;
+					if (select) {
+						if (this.#parseInnerHtmlDirective(DIRECTIVE_OPTIONS, optionsExpressionFunc, element))
+						    break;
+					} else {
+						if (this.#parseInnerHtmlDirective(DIRECTIVE_INNERIF, innerifExpressionFunc, element))
+						    break;
+						if (this.#parseInnerHtmlDirective(DIRECTIVE_BIND, textExpressionFunc, element))
+						    break;
+					}
+					if (this.#parseInnerHtmlDirective(DIRECTIVE_CHILDREN, childrenExpressionFunc, element))
+					    break;
 
-				if (select) {
-					if (this.#parseInnerHtmlDirective(DIRECTIVE_OPTIONS, optionsExpressionFunc, element))
-					    return;
-				} else {
-					if (this.#parseInnerHtmlDirective(DIRECTIVE_INNERIF, innerifExpressionFunc, element))
-						return;
-					if (this.#parseInnerHtmlDirective(DIRECTIVE_BIND, textExpressionFunc, element))
-						return;
-				}
-				if (this.#parseInnerHtmlDirective(DIRECTIVE_CHILDREN, childrenExpressionFunc, element))
-					return;
-
-				for (const child of element.childNodes)
-					if (isTemplateNode(child))
-						this.#children.push(new TinyAlTemplateNode(this.#object, child));
+					for (const child of element.childNodes)
+						if (isTemplateNode(child))
+							this.#children.push(new TinyAlTemplateNode(this.#object, child));
+				} while (false);
+				
+				this.#parseTextAttributes(element);
 			}
 		}
 
