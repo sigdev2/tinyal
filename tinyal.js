@@ -159,11 +159,17 @@
 	    const boolExpression =  boolExpressionFunc(data, code);
 		return () => {
 			if (boolExpression()) {
-			    element.classList.remove('ng-hide');
-                element.classList.add('ng-show');
+				if ('ng-hide' in element.classList) {
+					element.classList.remove('ng-hide');
+				} else if (element.style.display == 'none') {
+                    element.classList.add('ng-show');
+				}
 			} else {
-			    element.classList.remove('ng-show');
-                element.classList.add('ng-hide');
+				if ('ng-show' in element.classList) {
+					element.classList.remove('ng-show');
+				} else if (element.style.display != 'none') {
+                    element.classList.add('ng-hide');
+				}
 			}
 		}
 	}
@@ -172,11 +178,15 @@
 	    const boolExpression =  boolExpressionFunc(data, code);
 		return () => {
 			if (boolExpression()) {
-			    element.classList.remove('ng-show');
-                element.classList.add('ng-hide');
+				if ('ng-show' in element.classList)
+					element.classList.remove('ng-show');
+				else if (element.style.display != 'none')
+                    element.classList.add('ng-hide');
 			} else {
-			    element.classList.remove('ng-hide');
-                element.classList.add('ng-show');
+				if ('ng-hide' in element.classList)
+					element.classList.remove('ng-hide');
+				else if (element.style.display == 'none')
+                    element.classList.add('ng-show');
 			}
 		}
 	}
@@ -192,7 +202,7 @@
 	}
 
 	function parseForArgumentsNames(expression) {
-		const match = FOR_VAR_NAME_RX.match(expression);
+		const match = expression.match(FOR_VAR_NAME_RX);
 		if (match.length <= 1)
 		    return '[]';
 		return '[' + match[1] + ']';
@@ -215,11 +225,11 @@
 		for (const child of element.childNodes)
 		    items.push(child.cloneNode(true));
 
-		const forExpression = forExpressionFunc(expression);
+		const forExpression = forExpressionFunc(expression, itemNames);
 		return () => {
 			let inner = '';
 			try {
-				forExpression.apply(data, itemNames, [() => {
+				forExpression.apply(data, [function() {
 					const context = new Map();
 					for (const [index, val] of this)
 						context[args[index]] = val;
@@ -227,7 +237,7 @@
 						const elementClone = item.cloneNode(true);
 						const subTemplate = new TinyAlTemplateNode(context, elementClone);
 						subTemplate.merge(elementClone);
-						inner += elementClone.innerHTML;
+						inner += elementClone.outerHTML;
 					}
 				}]);
 			} catch(e) {
@@ -629,7 +639,7 @@
 			let render = '';
 			let props = {};
 			for (const [key, value] of Object.entries(obj)) {
-				if (key == 'style' || key == 's' || key == 'css')
+				if ((key == 'style' || key == 's' || key == 'css') && value.length > 0)
 					render += '<style>' + value + '</style>';
 				else if (key == 'ng' || key == 'rend' || key == 'render' || key == 'r' || key == 'html' || key == 'content')
 					render += value;
