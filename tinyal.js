@@ -102,7 +102,9 @@
 	}
 
 	function isTemplateNode(element) {
-		return element.nodeType == Node.TEXT_NODE || (element.nodeType == Node.ELEMENT_NODE && element.name != 'br') || element.nodeType == Node.DOCUMENT_FRAGMENT_NODE;
+		return (element.nodeType == Node.TEXT_NODE && element.nodeValue.replace(/\u00a0/g, '_').trim().length != 0) ||
+		       (element.nodeType == Node.ELEMENT_NODE) ||
+			   element.nodeType == Node.DOCUMENT_FRAGMENT_NODE;
 	}
 
 	function evalExpressionFunc(expression) {
@@ -202,40 +204,32 @@
 	}
 
 	function parseForArgumentsNames(expression) {
-		const match = expression.match(FOR_VAR_NAME_RX);
-		if (match.length <= 1)
-		    return '[]';
-		return '[' + match[1] + ']';
-	}
-
-	function parseForArgumentsValues(expression) {
-		try {
-		    return JSON.parse(expression);
-		} catch(e) {
-			console.warn('Can\'t parse for expression args!');
-		}
-		return [];
+		let m = FOR_VAR_NAME_RX.exec(expression);
+		if (m.length <= 1)
+			return [];
+		return [ m[1] ];
 	}
 	
 	function childrenExpressionFunc(data, expression, element) {
-        const itemNames = parseForArgumentsNames(expression);
-		const args = parseForArgumentsValues(itemNames);
+		const args = parseForArgumentsNames(expression);
+        const argsExprAarry = "[" + args.join() + "]";
 
-		const items = [];
+		const fragment = [];
 		for (const child of element.childNodes)
-		    items.push(child.cloneNode(true));
+		    if (isTemplateNode(child))
+			fragment.push(child.cloneNode(true));
 
-		const forExpression = forExpressionFunc(expression, itemNames);
+		const forExpression = forExpressionFunc(expression, argsExprAarry);
 		return () => {
 			let inner = '';
 			try {
 				forExpression.apply(data, [function() {
-					const context = new Map();
-					for (const [index, val] of this)
+					const context = {};
+					for (const [index, val] of this.entries())
 						context[args[index]] = val;
-					for (const item of items) {
-						const elementClone = item.cloneNode(true);
-						const subTemplate = new TinyAlTemplateNode(context, elementClone);
+					for (const node of fragment) {
+						const elementClone = node.cloneNode(true);
+						subTemplate = new TinyAlTemplateNode(context, elementClone);
 						subTemplate.merge(elementClone);
 						inner += elementClone.outerHTML;
 					}
@@ -288,8 +282,10 @@
 	function innerifExpressionFunc(data, expression, element) {
 		const items = [];
 		for (const child of element.childNodes) {
-			const elementClone = child.cloneNode(true);
-			items.push([elementClone, new TinyAlTemplateNode(data, elementClone)]);
+			if (isTemplateNode(child)) {
+				const elementClone = child.cloneNode(true);
+				items.push([elementClone, new TinyAlTemplateNode(data, elementClone)]);
+			}
 		}
 	    const boolExpression =  boolExpressionFunc(data, expression);
 		return () => {
