@@ -81,8 +81,8 @@
 	}
 
 	function getProperty(obj, path) {
-        const chain = path.splut('.');
-		for (const [index, part] of chain) {
+        const chain = path.split('.');
+		for (const part of chain) {
 			if (!(part in obj))
 			    return undefined;
 			obj = obj[part];
@@ -92,8 +92,8 @@
 	}
 	
 	function setProperty(obj, path, value) {
-        const chain = path.splut('.');
-		for (const [index, part] of chain) {
+        const chain = path.split('.');
+		for (const [index, part] of chain.entries()) {
 			if (part in obj)
 			    obj = obj[part];
 			else
@@ -221,7 +221,7 @@
 
 		const forExpression = forExpressionFunc(expression, argsExprAarry);
 		return () => {
-			let inner = '';
+			let inner = [];
 			try {
 				forExpression.apply(data, [function() {
 					const context = {};
@@ -231,7 +231,7 @@
 						const elementClone = node.cloneNode(true);
 						subTemplate = new TinyAlTemplateNode(context, elementClone);
 						subTemplate.merge(elementClone);
-						inner += elementClone.outerHTML;
+						inner.push(elementClone);
 					}
 				}]);
 			} catch(e) {
@@ -545,10 +545,22 @@
 					mod();
 				
 				if (this.#template != null) {
-					if (text)
-						element.nodeValue = this.#template();
-					else if (node)
-						element.innerHTML = this.#template();
+					const value = this.#template();
+					if (Array.isArray(value)) {
+						if (!text)
+						    element.innerHTML = '';
+						for (const el of value) {
+							if (text)
+								element.nodeValue += el.outerHTML;
+							else if (node)
+								element.appendChild(el);
+						}
+					} else {
+						if (text)
+							element.nodeValue = value;
+						else if (node)
+							element.innerHTML = value;
+					}
 				}
 			}
 
