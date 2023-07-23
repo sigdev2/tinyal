@@ -673,13 +673,14 @@
 					}
 			
 					connectedCallback() {
+						const oldDisplay = this.style.display;
 						this.style.display = 'none';
 						const shadowRoot = this.attachShadow({mode: 'closed'});
 						shadowRoot.innerHTML = template.innerHTML;
 						this.#appId = creator.add(shadowRoot, null, props).appId();
 						const app = creator.get(this.#appId);
 			            app.setRenderTimeout(prepareAppAttributes(this, app));
-						this.style.display = null;
+						this.style.display = oldDisplay;
 					}
 			
 					disconnectedCallback() {
