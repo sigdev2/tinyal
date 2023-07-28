@@ -43,6 +43,11 @@
 
 	const DEFAULT_RENDER_TIMEOUT = 16; // 60 FPS
 
+	function getrx(rx) {
+		rx.lastIndex = 0;
+		return rx;
+	}
+
 	function getStyles() {
         return '.ng-hide { display: none !important; } .ng-show { display: initial !important; }';
 	}
@@ -119,7 +124,7 @@
 	function textExpressionFunc(data, template, element) {
 		data = new Proxy(data, staticReadOnly);
         return () => {
-			return template.replaceAll(BIND_RX, (match, p1) => {
+			return template.replaceAll(getrx(BIND_RX), (match, p1) => {
 				try {
 				    return evalExpressionFunc(p1).apply(data);
 				} catch(e) {
@@ -133,7 +138,7 @@
 	function textAttributeExpressionFunc(data, attr, value, element) {
 		data = new Proxy(data, staticReadOnly);
         return () => {
-			const newValue = value.replaceAll(BIND_RX, (match, p1) => {
+			const newValue = value.replaceAll(getrx(BIND_RX), (match, p1) => {
 				try {
 				    return evalExpressionFunc(p1).apply(data);
 				} catch(e) {
@@ -205,7 +210,7 @@
 	}
 
 	function parseForArgumentsNames(expression) {
-		let m = FOR_VAR_NAME_RX.exec(expression);
+		let m = getrx(FOR_VAR_NAME_RX).exec(expression);
 		if (m.length <= 1)
 			return [];
 		return [ m[1] ];
@@ -444,7 +449,7 @@
 
 		#parseTextAttributes(element) {
 			for (const attr of element.attributes) {
-				if (attr.specified && attr.name.startsWith('ng-') && BIND_RX.test(attr.value)) {
+				if (attr.specified && attr.name.startsWith('ng-') && getrx(BIND_RX).test(attr.value)) {
 					this.#modifyers.push(textAttributeExpressionFunc(this.#object, attr.name.slice(3), attr.value, element));
 					element.removeAttribute(attr.name);
 				}
@@ -457,7 +462,7 @@
 			if (element.nodeType == Node.TEXT_NODE) {
 				this.#object = obj;
 				this.#text = true;
-				if (BIND_RX.test(element.nodeValue)) {
+				if (getrx(BIND_RX).test(element.nodeValue)) {
 					this.#template = textExpressionFunc(this.#object, element.nodeValue);
 					element.nodeValue = '';
 				}
