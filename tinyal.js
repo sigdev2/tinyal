@@ -30,13 +30,14 @@
 	const DIRECTIVE_MOUSEOVER = 'ng-mouseover';
 	const DIRECTIVE_TOUCHSTART = 'ng-touchstart';
 	const DIRECTIVE_TOUCHMOVE = 'ng-touchmove';
+	const DIRECTIVE_TOUCHEND = 'ng-touchend';
 
 	const DIRECTIVE_CHILDREN = 'ng-children';
 	const DIRECTIVE_INNERIF = 'ng-innerif';
 
 	const events = [DIRECTIVE_CLICK, DIRECTIVE_DBLCHANGE, DIRECTIVE_CHANGE, DIRECTIVE_INPUT, DIRECTIVE_FOCUS, DIRECTIVE_KEYDOWN,
 		DIRECTIVE_KEYPRESS, DIRECTIVE_KEYUP, DIRECTIVE_MOUSEDOWN, DIRECTIVE_MOUSEUP, DIRECTIVE_MOUSEENTER,
-		DIRECTIVE_MOUSELEAVE, DIRECTIVE_MOUSEMOVE, DIRECTIVE_MOUSEOVER, DIRECTIVE_TOUCHSTART, DIRECTIVE_TOUCHMOVE];
+		DIRECTIVE_MOUSELEAVE, DIRECTIVE_MOUSEMOVE, DIRECTIVE_MOUSEOVER, DIRECTIVE_TOUCHSTART, DIRECTIVE_TOUCHMOVE, DIRECTIVE_TOUCHEND];
 
 	const BIND_RX = /\{\{([^\}]*)\}\}/gm;
 	const FOR_VAR_NAME_RX = /^\s*(?:[A-z0-9_]+\s+)?(\[(?:[A-z0-9_\.]+\,?\s*)+\]|[_A-z0-9\.]+)(?:\s+in|\s+of|\s*;|\s*=|\s*$)/gm;
@@ -107,9 +108,27 @@
 		}
 	}
 
+	function isEmptyNodeValue(element) {
+		return element.nodeValue.replace(/\u00a0/g, '_').trim().length == 0;
+	}
+
+	function isNotEmptyTextNode(element) {
+        return element.nodeType == Node.TEXT_NODE && !isEmptyNodeValue(element);
+	}
+
+	function isEmptyTextNode(element) {
+        return element.nodeType == Node.TEXT_NODE && isEmptyNodeValue(element);
+	}
+
 	function isTemplateNode(element) {
-		return (element.nodeType == Node.TEXT_NODE && element.nodeValue.replace(/\u00a0/g, '_').trim().length != 0) ||
-		       (element.nodeType == Node.ELEMENT_NODE) ||
+		return isNotEmptyTextNode(element) ||
+		       element.nodeType == Node.ELEMENT_NODE ||
+			   element.nodeType == Node.DOCUMENT_FRAGMENT_NODE;
+	}
+
+	function isNodeForMerge(element) {
+		return element.nodeType == Node.TEXT_NODE ||
+		       element.nodeType == Node.ELEMENT_NODE ||
 			   element.nodeType == Node.DOCUMENT_FRAGMENT_NODE;
 	}
 
@@ -167,13 +186,13 @@
 	    const boolExpression =  boolExpressionFunc(data, code);
 		return () => {
 			if (boolExpression()) {
-				if ('ng-hide' in element.classList) {
+				if (element.classList.contains('ng-hide')) {
 					element.classList.remove('ng-hide');
 				} else if (element.style.display == 'none') {
                     element.classList.add('ng-show');
 				}
 			} else {
-				if ('ng-show' in element.classList) {
+				if (element.classList.contains('ng-show')) {
 					element.classList.remove('ng-show');
 				} else if (element.style.display != 'none') {
                     element.classList.add('ng-hide');
@@ -186,12 +205,12 @@
 	    const boolExpression =  boolExpressionFunc(data, code);
 		return () => {
 			if (boolExpression()) {
-				if ('ng-show' in element.classList)
+				if (element.classList.contains('ng-show'))
 					element.classList.remove('ng-show');
 				else if (element.style.display != 'none')
                     element.classList.add('ng-hide');
 			} else {
-				if ('ng-hide' in element.classList)
+				if (element.classList.contains('ng-hide'))
 					element.classList.remove('ng-hide');
 				else if (element.style.display == 'none')
                     element.classList.add('ng-show');
@@ -223,7 +242,7 @@
 		const fragment = [];
 		for (const child of element.childNodes)
 		    if (isTemplateNode(child))
-			fragment.push(child.cloneNode(true));
+			    fragment.push(child.cloneNode(true));
 
 		const forExpression = forExpressionFunc(expression, argsExprAarry);
 		return () => {
@@ -541,7 +560,7 @@
 		}
 
 		merge(element) {
-            if (!isTemplateNode(element))
+            if (!isNodeForMerge(element))
 			    return;
 
 			const text = this.#text && element.nodeType == Node.TEXT_NODE;
@@ -572,9 +591,16 @@
 
 			let pos = 0;
 			for (const child of element.childNodes) {
-				if (!isTemplateNode(child) || this.#children[pos] === undefined)
+				if (!isNodeForMerge(child))
 				    continue;
-				this.#children[pos].merge(child);
+				const template = this.#children[pos];
+				if (template === undefined)
+				    continue;
+
+				if (isEmptyTextNode(child) && !template.#text)
+				    continue;
+
+				template.merge(child);
 				pos += 1;
 			}
 		}
