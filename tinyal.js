@@ -4,6 +4,7 @@
 	
 	const DIRECTIVE_INIT = 'ng-init';
 	const DIRECTIVE_FPS = 'ng-fps';
+	const DIRECTIVE_CREATE = 'ng-create';
 	
 	const DIRECTIVE_MODEL = 'ng-model';
 	const DIRECTIVE_BIND = 'ng-bind';
@@ -353,6 +354,17 @@
 			parseInitDirective('{' + element.getAttribute(DIRECTIVE_INIT) + '}', props);
 			element.removeAttribute(DIRECTIVE_INIT);
 		}
+		
+		if (element.hasAttribute(DIRECTIVE_CREATE)) {
+			const code = element.getAttribute(DIRECTIVE_CREATE);
+			try {
+				evalExpressionFunc(code).apply(props);
+			} catch(e) {
+				console.warn(e.message);
+			}
+			element.removeAttribute(DIRECTIVE_CREATE);
+		}
+
 		if (element.hasAttribute(DIRECTIVE_FPS)) {
 			const renderTime = parseFps(element.getAttribute(DIRECTIVE_FPS));
 			element.removeAttribute(DIRECTIVE_FPS);
@@ -506,6 +518,16 @@
 				const bindContext = (this.#object instanceof TinyAlApp ? new Proxy(this.#object, staticRenderer) : this.#object);
 				bindEvents(bindContext, element);
 
+				if (element.hasAttribute(DIRECTIVE_CREATE)) {
+					const code = element.getAttribute(DIRECTIVE_CREATE);
+					try {
+						evalExpressionFunc(code).apply(this.#object);
+					} catch(e) {
+						console.warn(e.message);
+					}
+					element.removeAttribute(DIRECTIVE_CREATE);
+				}
+
 				if (element.hasAttribute(DIRECTIVE_SHOW)) {
 					this.#modifyers.push(showExpressionFunc(this.#object, element.getAttribute(DIRECTIVE_SHOW), element));
 					element.removeAttribute(DIRECTIVE_SHOW);
@@ -617,12 +639,10 @@
 	    constructor(appId, element, props = null) {
 			this.#appId = appId;
             this.#element = element;
+
 			if (props != null)
 			    Object.assign(this, props);
-			this.#renderTimeout = prepareAppAttributes(this.#element, this);
 			
-			this.#template = new TinyAlTemplateNode(this, this.#element);
-
 			const self = this;
 
 			this.appId = function() {
@@ -658,6 +678,10 @@
 					}
 				}
 			}
+
+			this.#renderTimeout = prepareAppAttributes(this.#element, this);
+			
+			this.#template = new TinyAlTemplateNode(this, this.#element);
 
 			this.render();
 		}
