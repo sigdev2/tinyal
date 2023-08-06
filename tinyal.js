@@ -1,10 +1,6 @@
 ((global) => {
-	const DIRECTIVE_APP = 'ng-app';
-	const DIRECTIVE_CONTROLLER = 'ng-controller';
-	
 	const DIRECTIVE_INIT = 'ng-init';
 	const DIRECTIVE_FPS = 'ng-fps';
-	const DIRECTIVE_CREATE = 'ng-create';
 	
 	const DIRECTIVE_MODEL = 'ng-model';
 	const DIRECTIVE_BIND = 'ng-bind';
@@ -15,30 +11,12 @@
 	const DIRECTIVE_HIDE = 'ng-hide';
 	const DIRECTIVE_DISABLED = 'ng-disabled';
 
-	const DIRECTIVE_CLICK = 'ng-click';
-	const DIRECTIVE_DBLCHANGE = 'ng-dblclick';
-	const DIRECTIVE_CHANGE = 'ng-change';
-	const DIRECTIVE_INPUT = 'ng-input';
-	const DIRECTIVE_FOCUS = 'ng-focus';
-	const DIRECTIVE_KEYDOWN = 'ng-keydown';
-	const DIRECTIVE_KEYPRESS = 'ng-keypress';
-	const DIRECTIVE_KEYUP = 'ng-keyup';
-	const DIRECTIVE_MOUSEDOWN = 'ng-mousedown';
-	const DIRECTIVE_MOUSEUP = 'ng-mouseup';
-	const DIRECTIVE_MOUSEENTER = 'ng-mouseenter';
-	const DIRECTIVE_MOUSELEAVE = 'ng-mouseleave';
-	const DIRECTIVE_MOUSEMOVE = 'ng-mousemove';
-	const DIRECTIVE_MOUSEOVER = 'ng-mouseover';
-	const DIRECTIVE_TOUCHSTART = 'ng-touchstart';
-	const DIRECTIVE_TOUCHMOVE = 'ng-touchmove';
-	const DIRECTIVE_TOUCHEND = 'ng-touchend';
-
 	const DIRECTIVE_CHILDREN = 'ng-children';
 	const DIRECTIVE_INNERIF = 'ng-innerif';
 
-	const events = [DIRECTIVE_CLICK, DIRECTIVE_DBLCHANGE, DIRECTIVE_CHANGE, DIRECTIVE_INPUT, DIRECTIVE_FOCUS, DIRECTIVE_KEYDOWN,
-		DIRECTIVE_KEYPRESS, DIRECTIVE_KEYUP, DIRECTIVE_MOUSEDOWN, DIRECTIVE_MOUSEUP, DIRECTIVE_MOUSEENTER,
-		DIRECTIVE_MOUSELEAVE, DIRECTIVE_MOUSEMOVE, DIRECTIVE_MOUSEOVER, DIRECTIVE_TOUCHSTART, DIRECTIVE_TOUCHMOVE, DIRECTIVE_TOUCHEND];
+	const EVENTS_DIRECTIVES = ['ng-click', 'ng-dblclick', 'ng-change', 'ng-input', 'ng-focus', 'ng-keydown',
+	                           'ng-keypress', 'ng-keyup', 'ng-mousedown', 'ng-mouseup', 'ng-mouseenter',
+	                           'ng-mouseleave', 'ng-mousemove', 'ng-mouseover', 'ng-touchstart', 'ng-touchmove', 'ng-touchend'];
 
 	const BIND_RX = /\{\{([^\}]*)\}\}/gm;
 	const FOR_VAR_NAME_RX = /^\s*(?:[A-z0-9_]+\s+)?(\[(?:[A-z0-9_\.]+\,?\s*)+\]|[_A-z0-9\.]+)(?:\s+in|\s+of|\s*;|\s*=|\s*$)/gm;
@@ -54,17 +32,8 @@
         return '.ng-hide { display: none !important; } .ng-show { display: initial !important; }';
 	}
 
-	function addGlobalStyle() {
-        const css = getStyles(),
-			head = document.head || document.getElementsByTagName('head')[0],
-			style = document.createElement('style');
-
-		head.appendChild(style);
-		style.appendChild(document.createTextNode(css));
-	}
-
 	function bindEvents(data, element) {
-        for (const eventAttr of events) {
+        for (const eventAttr of EVENTS_DIRECTIVES) {
 			if (element.hasAttribute(eventAttr)) {
 				const code = element.getAttribute(eventAttr);
 				element.removeAttribute(eventAttr);
@@ -326,15 +295,6 @@
 		}
 	}
 
-	function parseInitDirective(json, obj) {
-		try {
-			const attrs = JSON.parse(json);
-			Object.assign(obj, attrs);
-		} catch(e) {
-			console.warn('Can\'t parse init as json!');
-		}
-	}
-
 	function parseFps(fps) {
 		try {
 			const value = parseInt(fps);
@@ -344,34 +304,6 @@
 			console.warn('Can\'t parse fps as int!');
 			return 0;
 		}
-	}
-
-	function prepareAppAttributes(element, props) {
-		if (element.nodeType != Node.ELEMENT_NODE)
-		    return DEFAULT_RENDER_TIMEOUT;
-		element.removeAttribute(DIRECTIVE_APP);
-		if (element.hasAttribute(DIRECTIVE_INIT)) {
-			parseInitDirective('{' + element.getAttribute(DIRECTIVE_INIT) + '}', props);
-			element.removeAttribute(DIRECTIVE_INIT);
-		}
-		
-		if (element.hasAttribute(DIRECTIVE_CREATE)) {
-			const code = element.getAttribute(DIRECTIVE_CREATE);
-			try {
-				evalExpressionFunc(code).apply(props);
-			} catch(e) {
-				console.warn(e.message);
-			}
-			element.removeAttribute(DIRECTIVE_CREATE);
-		}
-
-		if (element.hasAttribute(DIRECTIVE_FPS)) {
-			const renderTime = parseFps(element.getAttribute(DIRECTIVE_FPS));
-			element.removeAttribute(DIRECTIVE_FPS);
-			return renderTime;
-		}
-
-		return DEFAULT_RENDER_TIMEOUT;
 	}
 	
 	const staticArrayMethods = new Set('pop', 'push', 'shift', 'unshift', 'splice', 'reverse', 'sort');
@@ -490,45 +422,22 @@
 		}
 
 		constructor(obj, element) {
-			if (!isTemplateNode(element))
-			    return;
+			this.#object = obj;
 			if (element.nodeType == Node.TEXT_NODE) {
-				this.#object = obj;
 				this.#text = true;
 				if (getrx(BIND_RX).test(element.nodeValue)) {
 					this.#template = textExpressionFunc(this.#object, element.nodeValue);
 					element.nodeValue = '';
 				}
 			} else if (element.nodeType == Node.DOCUMENT_FRAGMENT_NODE) {
-				this.#object = obj;
 				for (const child of element.childNodes)
 					if (isTemplateNode(child))
 						this.#children.push(new TinyAlTemplateNode(this.#object, child));
 			} else {
-				const subApp = element.hasAttribute(DIRECTIVE_APP);
-				const subControl = element.hasAttribute(DIRECTIVE_CONTROLLER);
-				if (subApp || subControl) {
-					const appName = (subApp ? element.getAttribute(DIRECTIVE_APP) : element.getAttribute(DIRECTIVE_CONTROLLER));
-					if (appName in obj)
-						obj = obj[appName];
-				}
-
-				this.#object = obj;
-				
 			    this.#nodeName = element.name;
 
 				const bindContext = (this.#object instanceof TinyAlApp ? new Proxy(this.#object, staticRenderer) : this.#object);
 				bindEvents(bindContext, element);
-
-				if (element.hasAttribute(DIRECTIVE_CREATE)) {
-					const code = element.getAttribute(DIRECTIVE_CREATE);
-					try {
-						evalExpressionFunc(code).apply(this.#object);
-					} catch(e) {
-						console.warn(e.message);
-					}
-					element.removeAttribute(DIRECTIVE_CREATE);
-				}
 
 				if (element.hasAttribute(DIRECTIVE_SHOW)) {
 					this.#modifyers.push(showExpressionFunc(this.#object, element.getAttribute(DIRECTIVE_SHOW), element));
@@ -638,12 +547,11 @@
 		#renderQueue = false;
 		#appId = '';
 
-	    constructor(appId, element, props = null) {
+	    constructor(appId, element, props, fps) {
 			this.#appId = appId;
             this.#element = element;
-
-			if (props != null)
-			    Object.assign(this, props);
+			this.#renderTimeout = fps;
+			Object.assign(this, props);
 			
 			const self = this;
 
@@ -680,12 +588,8 @@
 					}
 				}
 			}
-
-			this.#renderTimeout = prepareAppAttributes(this.#element, this);
 			
 			this.#template = new TinyAlTemplateNode(this, this.#element);
-
-			this.render();
 		}
 	}
 
@@ -700,96 +604,95 @@
 			return appId;
 		}
 
-		#createWebComponent(obj, appId = null) {
-			let tag = null;
-			let render = '';
-			let props = {};
-			for (const [key, value] of Object.entries(obj)) {
-				if ((key == 'style' || key == 's' || key == 'css') && value.length > 0)
-					render += '<style>' + value + '</style>';
-				else if (key == 'ng' || key == 'rend' || key == 'render' || key == 'r' || key == 'html' || key == 'content')
-					render += value;
-				else if (key == 'element' || key == 'el' || key == 'tag' || key == 't')
-					tag = value;
-				else
-					props[key] = value;
-			}
-	
-			if (tag != null) {
-				let template = document.createElement('template');
-				if (render.length > 0) {
-					render += '<style>' + getStyles() + '</style>';
-					template.innerHTML = render;
-				}
-				const creator = this;
-				customElements.define(tag, class extends HTMLElement {
-					#appId = null;
-
-					appId() {
-						return this.#appId;
-					}
-			
-					connectedCallback() {
-						const oldDisplay = this.style.display;
-						this.style.display = 'none';
-						const shadowRoot = this.attachShadow({mode: 'closed'});
-						shadowRoot.innerHTML = template.innerHTML;
-						this.#appId = creator.add(shadowRoot, null, props).appId();
-						const app = creator.get(this.#appId);
-			            app.setRenderTimeout(prepareAppAttributes(this, app));
-						this.style.display = oldDisplay;
-					}
-			
-					disconnectedCallback() {
-						creator.remove(this.#appId);
-					}
-				});
-				return null;
-			}
-
-			return add(document.createElement('div'), appId, false, props);
-		}
-
-		init() {
-			addGlobalStyle();
-			const apps = document.querySelectorAll('*:not([' + DIRECTIVE_APP + ']) *[' + DIRECTIVE_APP + '], *:not([' + DIRECTIVE_CONTROLLER + ']) *[' + DIRECTIVE_APP + ']');
-			for (const app of apps)
-				this.add(app);
-		}
-
-		find(appId) {
+		get(appId) {
 			return this.#apps[appId];
 		}
 
-		get(appId) {
-			const apps = this.#apps[appId];
-			if (apps.length <= 0)
-			    return null;
-			return apps[0];
-		}
-
-		remove(appId) {
-			this.#apps.delete(appId);
-		}
-
-		add(template, appId = null, props = null) {
-            if (template.constructor.name === 'Object')
-			    return this.#createWebComponent(template, appId);
-
-			if (!appId && template.nodeType == Node.ELEMENT_NODE)
-				appId = template.getAttribute(DIRECTIVE_APP);
-			if (!appId)
-				appId = this.#gnerateAppId();
-
-			const app = new Proxy(new TinyAlApp(appId, template, props), staticRenderer);
-
-			if (this.#apps.has(appId)) {
-			    this.#apps[appId].push(app);
-			} else {
-			    this.#apps[appId] = [app];
+		add(config) {
+            if (config.constructor.name !== 'Object') {
+				console.error('Component register error: config is not object!');
+			    return;
 			}
-			
-			return app;
+
+			let tag = null;
+			let render = '';
+			let style = '';
+			let props = {};
+			let init = function() {};
+			let fps = DEFAULT_RENDER_TIMEOUT;
+			for (const [key, value] of Object.entries(config)) {
+				if ((key == 'style' || key == 's' || key == 'css') && value.length > 0)
+				    style = value;
+				else if (key == 'ng' || key == 'rend' || key == 'render' || key == 'r' || key == 'html' || key == 'content')
+					render = value;
+				else if (key == 'element' || key == 'el' || key == 'tag' || key == 't')
+					tag = value;
+				else if (key == 'init' || key == 'create' || key == 'construct' && typeof value === 'function')
+				    init = value;
+				else if (key == 'fps' && typeof value === 'number')
+				    fps = value;
+				else
+					props[key] = value;
+			}
+            
+			if (tag == null) {
+				console.error('Component register error: tag is not specified!');
+			    return;
+			}
+
+			let template = document.createElement('template');
+			if (render.length > 0) {
+				render += '<style>' + getStyles() + style + '</style>';
+				template.innerHTML = render;
+			}
+
+			const creator = this;
+			customElements.define(tag, class extends HTMLElement {
+				#appId = null;
+
+				appId() {
+					return this.#appId;
+				}
+		
+				connectedCallback() {
+					const oldDisplay = this.style.display;
+					this.style.display = 'none';
+
+					const shadowRoot = this.attachShadow({mode: 'closed'});
+					shadowRoot.innerHTML = template.innerHTML;
+
+					this.#appId = creator.#gnerateAppId();
+
+					const app = new TinyAlApp(this.#appId, shadowRoot, props, fps);
+					init.apply(app);
+	
+					if (this.hasAttribute(DIRECTIVE_INIT)) {
+						const code = this.getAttribute(DIRECTIVE_INIT);
+						this.removeAttribute(DIRECTIVE_INIT);
+						try {
+							evalExpressionFunc(code).apply(app);
+						} catch(e) {
+							console.warn(e.message);
+						}
+					}
+
+					if (this.hasAttribute(DIRECTIVE_FPS)) {
+						const renderTime = parseFps(this.getAttribute(DIRECTIVE_FPS));
+						this.removeAttribute(DIRECTIVE_FPS);
+						app.setRenderTimeout(renderTime);
+					}
+					
+					creator.#apps[this.#appId] = new Proxy(app, staticRenderer);
+
+					app.render();
+
+					this.style.display = oldDisplay;
+				}
+		
+				disconnectedCallback() {
+					creator.#apps.delete(appId);
+				}
+			});
 		}
 	}
 
