@@ -443,10 +443,12 @@
 
 		get(app, attr) {
 			const item = Reflect.get(app, attr);
-			if (item.constructor.name === 'Object')
-				return new Proxy(item, new TinyAlChildObjectRenderer(app))
-			if (item.constructor.name === 'Array')
-				return new Proxy(item, new TinyAlChildArrayRenderer(app))
+			if (item) {
+				if (item.constructor.name === 'Object')
+					return new Proxy(item, new TinyAlChildObjectRenderer(app));
+				if (item.constructor.name === 'Array')
+					return new Proxy(item, new TinyAlChildArrayRenderer(app));
+			}
 			return item;
 		}
 	}
