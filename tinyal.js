@@ -308,83 +308,55 @@
 	
 	const staticArrayMethods = new Set('pop', 'push', 'shift', 'unshift', 'splice', 'reverse', 'sort');
 
-	class TinyAlChildArrayRenderer {
-        #app = null;
-
-		constructor(app) {
-			this.#app = app;
-		}
-
-		set(arr, attr, value) {
-            const result = Reflect.set(arr, attr, value);
-			if (result && this.#app)
-			    this.#app.render();
-			return result;
-		}
-
-		get(arr, attr) {
-            if (attr in staticArrayMethods) {
-				return function() {
-					const result = Reflect.get(arr, attr).apply(arr, arguments);
-					if (this.#app)
-						this.#app.render();
-                    return result;
-				}
-			}
-
-			const item = Reflect.get(arr, attr);
-			if (item.constructor.name === 'Object')
-				return new Proxy(item, new TinyAlChildObjectRenderer(this.#app))
-			if (item.constructor.name === 'Array')
-				return new Proxy(item, new TinyAlChildArrayRenderer(this.#app))
-			return item;
-		}
-	}
-
-	class TinyAlChildObjectRenderer {
-        #app = null;
-
-		constructor(app) {
-			this.#app = app;
-		}
-
-		set(obj, attr, value) {
-            const result = Reflect.set(obj, attr, value);
-			if (result && this.#app)
-			    this.#app.render();
-			return result;
-		}
-
-		get(obj, attr) {
-			const item = Reflect.get(obj, attr);
-			if (item.constructor.name === 'Object')
-				return new Proxy(item, new TinyAlChildObjectRenderer(this.#app))
-			if (item.constructor.name === 'Array')
-				return new Proxy(item, new TinyAlChildArrayRenderer(this.#app))
-			return item;
-		}
-	}
-
 	class TinyAlRenderer {
+		
+		#methods = new Set();
+		#target = null;
+
+		#targetRender() {
+			if (this.#target)
+				this.#target.render();
+			else
+				app.render();
+		}
+
+		constructor(methods, target) {
+			if (methods)
+			    this.#methods = methods;
+			if (target)
+				this.#target = target;
+		}
+
 		set(app, attr, value) {
+			const oldvalue = Reflect.get(app, attr);
+			if (oldvalue == value)
+			    return true;
             const result = Reflect.set(app, attr, value);
 			if (result)
-			    app.render();
+			    this.#targetRender();
 			return result;
 		}
 
 		get(app, attr) {
+            if (attr in this.#methods) {
+				return function() {
+					const result = Reflect.get(arr, attr).apply(arr, arguments);
+					this.#targetRender();
+                    return result;
+				}
+			}
+
 			const item = Reflect.get(app, attr);
 			if (item) {
 				if (item.constructor.name === 'Object')
-					return new Proxy(item, new TinyAlChildObjectRenderer(app));
+					return new Proxy(item, new TinyAlRenderer(null, app));
 				if (item.constructor.name === 'Array')
-					return new Proxy(item, new TinyAlChildArrayRenderer(app));
+					return new Proxy(item, new TinyAlRenderer(staticArrayMethods, app));
 			}
 			return item;
 		}
 	}
-	
+
 	class TinyAlReadOnlyProxy {
 		set(app, attr, value) {
             console.warn('Can\'t write to read only object!');
@@ -641,10 +613,9 @@
 			}
 
 			let template = document.createElement('template');
-			if (render.length > 0) {
-				render += '<style>' + getStyles() + style + '</style>';
-				template.innerHTML = render;
-			}
+			const hasContent = render.length > 0;
+			if (hasContent || style.length > 0)
+				template.innerHTML = '<style>' + (hasContent ? getStyles() : '') + style + '</style>' + render;
 
 			const creator = this;
 			customElements.define(tag, class extends HTMLElement {
@@ -652,6 +623,10 @@
 
 				appId() {
 					return this.#appId;
+				}
+
+				app() {
+					return creator.get(this.#appId);
 				}
 		
 				connectedCallback() {
