@@ -313,7 +313,7 @@
 		#methods = new Set();
 		#target = null;
 
-		#targetRender() {
+		#targetRender(app) {
 			if (this.#target)
 				this.#target.render();
 			else
@@ -333,15 +333,16 @@
 			    return true;
             const result = Reflect.set(app, attr, value);
 			if (result)
-			    this.#targetRender();
+			    this.#targetRender(app);
 			return result;
 		}
 
 		get(app, attr) {
+			const self = this;
             if (attr in this.#methods) {
 				return function() {
-					const result = Reflect.get(arr, attr).apply(arr, arguments);
-					this.#targetRender();
+					const result = Reflect.get(app, attr).apply(app, arguments);
+					self.#targetRender(app);
                     return result;
 				}
 			}
