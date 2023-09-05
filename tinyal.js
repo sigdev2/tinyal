@@ -328,6 +328,8 @@
 		}
 
 		set(app, attr, value) {
+			if (attr.startsWith('_'))
+			    return Reflect.set(app, attr, value);
 			const oldvalue = Reflect.get(app, attr);
 			if (oldvalue == value)
 			    return true;
@@ -338,6 +340,8 @@
 		}
 
 		get(app, attr) {
+			if (attr.startsWith('_'))
+			    return Reflect.get(app, attr);
 			const self = this;
             if (attr in this.#methods) {
 				return function() {
@@ -360,7 +364,10 @@
 
 	class TinyAlReadOnlyProxy {
 		set(app, attr, value) {
+			if (attr.startsWith('_'))
+			    return Reflect.set(app, attr, value);
             console.warn('Can\'t write to read only object!');
+			return false;
 		}
 	}
 
@@ -666,7 +673,7 @@
 				}
 		
 				disconnectedCallback() {
-					creator.#apps.delete(appId);
+					creator.#apps.delete(this.#appId);
 				}
 			});
 		}
