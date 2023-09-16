@@ -44,7 +44,7 @@
 
 		let copy = new obj.constructor();
 
-		stack || (stack = new Stack);
+		stack || (stack = new Map);
 		const stacked = stack.get(obj);
 		if (stacked)
 			return stacked;
@@ -632,16 +632,16 @@
 		}
 
 		get(appId) {
-			return this.#apps[appId];
+			return this.#apps.get(appId);
 		}
 
 		add(tag, config) {
-			if (!!!tag) {
+			if (!tag || arguments.length < 2) {
 				console.error('Component register error: tag is not specified!');
 			    return;
 			}
 
-			tag = tag.toUpperCase();
+			tag = tag.toLowerCase();
 
 			if (!tag.includes('-')) {
 				console.error('Component register error: tag name "' + tag + '" is not valid!');
@@ -658,7 +658,7 @@
 			    return;
 			}
 
-			this.#props[tag] = simpleDeepClone(config);
+			this.#props.set(tag, simpleDeepClone(config));
 
 			let render = '';
 			let style = '';
@@ -723,7 +723,7 @@
 						app.setRenderTimeout(renderTime);
 					}
 					
-					creator.#apps[this.#appId] = new Proxy(app, staticRenderer);
+					creator.#apps.set(this.#appId, new Proxy(app, staticRenderer));
 
 					app.render();
 
@@ -737,12 +737,12 @@
 		}
 
 		extends(tag, parent, config) {
-			if (!!!parent) {
+			if (!parent || arguments.length < 2) {
 				console.error('Component register error: tag "' + tag + '" can\'t extends not specified parent tag!');
 			    return;
 			}
 
-			parent = parent.toUpperCase();
+			parent = parent.toLowerCase();
 			
 			if (!this.#props.has(parent)) {
 				console.error('Component register error: tag "' + tag + '" can\'t extends not registred in tinyal parent tag "' + parent + '"!');
@@ -755,7 +755,7 @@
 			}
 
 			let actual = {};
-			Object.assign(actual, simpleDeepClone(this.#props[parent]));
+			Object.assign(actual, simpleDeepClone(this.#props.get(parent)));
 			Object.assign(actual, config);
             this.add(tag, actual);
 		}
