@@ -15,6 +15,7 @@
 	const DIRECTIVE_INNERIF = 'ng-innerif';
 
 	const EVENTS_DIRECTIVES = ['ng-click', 'ng-dblclick', 'ng-change', 'ng-input', 'ng-focus', 'ng-keydown',
+	                           'ng-contextmenu',
 	                           'ng-keypress', 'ng-keyup', 'ng-mousedown', 'ng-mouseup', 'ng-mouseenter',
 	                           'ng-mouseleave', 'ng-mousemove', 'ng-mouseover', 'ng-touchstart', 'ng-touchmove', 'ng-touchend'];
 
@@ -23,10 +24,55 @@
 
 	const DEFAULT_RENDER_TIMEOUT = 16; // 60 FPS
 
+	function isObject(value) {
+		const type = typeof value;
+		return value != null && (type == 'object');
+	}
+
+	function isPlainObject(value) {
+		return isObject(value) && value.constructor === Object;
+	  }
+
 	function getrx(rx) {
 		rx.lastIndex = 0;
 		return rx;
 	}
+
+	function simpleDeepClone(obj, stack) {
+		if (!isObject(obj))
+		    return obj;
+
+		let copy = new obj.constructor();
+
+		stack || (stack = new Stack);
+		const stacked = stack.get(obj);
+		if (stacked)
+			return stacked;
+		stack.set(obj, copy);
+
+		if (obj.constructor === Set) {
+			obj.forEach((subValue) => {
+				copy.add(simpleDeepClone(subValue, stack));
+			});
+		} else if (obj.constructor === Map) {
+			obj.forEach((subValue, key) => {
+				copy.set(key, simpleDeepClone(subValue, stack));
+			});
+		} else if (Array.isArray(obj)) {
+			obj.forEach((subValue) => {
+				copy.push(simpleDeepClone(subValue, stack));
+			});
+		} else if (obj.constructor === Object) {
+			Object.setPrototypeOf(copy, Object.getPrototypeOf(obj));
+			for (const key in obj)
+				if (obj.hasOwnProperty(key))
+					copy[key] = simpleDeepClone(obj[key], stack);
+		} else {
+			return obj;
+		}
+	  
+		return copy;
+	  }
 
 	function getStyles() {
         return '.ng-hide { display: none !important; } .ng-show { display: initial !important; }';
@@ -575,6 +621,7 @@
 
 	class TinyAl {
         #apps = new Map();
+        #props = new Map();
 
 		#gnerateAppId() {
 			let appId = null
@@ -588,13 +635,31 @@
 			return this.#apps[appId];
 		}
 
-		add(config) {
-            if (config.constructor.name !== 'Object') {
-				console.error('Component register error: config is not object!');
+		add(tag, config) {
+			if (!!!tag) {
+				console.error('Component register error: tag is not specified!');
 			    return;
 			}
 
-			let tag = null;
+			tag = tag.toUpperCase();
+
+			if (!tag.includes('-')) {
+				console.error('Component register error: tag name "' + tag + '" is not valid!');
+			    return;
+			}
+
+			if (this.#props.has(tag) || customElements.get(tag) !== undefined) {
+				console.error('Component register error: tag "' + tag + '" already registred!');
+			    return;
+			}
+
+            if (!isPlainObject(config)) {
+				console.error('Component register error: for tag "' + tag + '" config is not object!');
+			    return;
+			}
+
+			this.#props[tag] = simpleDeepClone(config);
+
 			let render = '';
 			let style = '';
 			let props = {};
@@ -605,19 +670,12 @@
 				    style = value;
 				else if (key == 'ng' || key == 'rend' || key == 'render' || key == 'r' || key == 'html' || key == 'content')
 					render = value;
-				else if (key == 'element' || key == 'el' || key == 'tag' || key == 't')
-					tag = value;
 				else if (key == 'init' || key == 'create' || key == 'construct' && typeof value === 'function')
 				    init = value;
 				else if (key == 'fps' && typeof value === 'number')
 				    fps = value;
 				else
-					props[key] = value;
-			}
-            
-			if (tag == null) {
-				console.error('Component register error: tag is not specified!');
-			    return;
+					props[key] = simpleDeepClone(value);
 			}
 
 			let template = document.createElement('template');
@@ -646,7 +704,7 @@
 
 					this.#appId = creator.#gnerateAppId();
 
-					const app = new TinyAlApp(this.#appId, shadowRoot, props, fps);
+					const app = new TinyAlApp(this.#appId, shadowRoot, simpleDeepClone(props), fps);
 					init.apply(app);
 	
 					if (this.hasAttribute(DIRECTIVE_INIT)) {
@@ -677,6 +735,30 @@
 				}
 			});
 		}
+
+		extends(tag, parent, config) {
+			if (!!!parent) {
+				console.error('Component register error: tag "' + tag + '" can\'t extends not specified parent tag!');
+			    return;
+			}
+
+			parent = parent.toUpperCase();
+			
+			if (!this.#props.has(parent)) {
+				console.error('Component register error: tag "' + tag + '" can\'t extends not registred in tinyal parent tag "' + parent + '"!');
+			    return;
+			}
+
+			if (!isPlainObject(config)) {
+				console.error('Component register error: for tag "' + tag + '" config is not object!');
+			    return;
+			}
+
+			let actual = {};
+			Object.assign(actual, simpleDeepClone(this.#props[parent]));
+			Object.assign(actual, config);
+            this.add(tag, actual);
+		}
 	}
 
 	const staticTinyAl = new TinyAl();
@@ -686,10 +768,9 @@
 			return staticTinyAl;
 		});
     } else {
-        if ('tinyal' in global) {
+        if ('tinyal' in global)
             console.warn('Module "tinyal" is already exported! Ignore loading!');
-		} else {
+		else
             global['tinyal'] = staticTinyAl;
-		}
     }
 })(this);
