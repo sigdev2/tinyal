@@ -737,25 +737,29 @@
 		}
 
 		extends(tag, parent, config) {
-			if (!parent || arguments.length < 2) {
+			if (!parent || arguments.length < 3) {
 				console.error('Component register error: tag "' + tag + '" can\'t extends not specified parent tag!');
 			    return;
 			}
 
-			parent = parent.toLowerCase();
-			
-			if (!this.#props.has(parent)) {
-				console.error('Component register error: tag "' + tag + '" can\'t extends not registred in tinyal parent tag "' + parent + '"!');
-			    return;
-			}
+			if (!isPlainObject(parent)) {
+				parent = parent.toLowerCase();
+				
+				if (!this.#props.has(parent)) {
+					console.error('Component register error: tag "' + tag + '" can\'t extends not registred in tinyal parent tag "' + parent + '"!');
+					return;
+				}
 
-			if (!isPlainObject(config)) {
-				console.error('Component register error: for tag "' + tag + '" config is not object!');
-			    return;
+				if (!isPlainObject(config)) {
+					console.error('Component register error: for tag "' + tag + '" config is not object!');
+					return;
+				}
+
+				parent = this.#props.get(parent);
 			}
 
 			let actual = {};
-			Object.assign(actual, simpleDeepClone(this.#props.get(parent)));
+			Object.assign(actual, simpleDeepClone(parent));
 			Object.assign(actual, config);
             this.add(tag, actual);
 		}
