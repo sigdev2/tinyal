@@ -388,17 +388,20 @@
 			if (!attr.startsWith('$'))
 			    return Reflect.get(app, attr);
 			attr = attr.substring(1);
+			const value = Reflect.get(app, attr);
+			if (!value)
+			    return value;
+
 			const self = this;
-            if (isFunction(attr)) {
+            if (isFunction(value)) {
 				return function() {
-					const result = Reflect.get(app, attr).apply(app, arguments);
+					const result = value.apply(app, arguments);
 					self.#targetRender(app);
                     return result;
 				}
 			}
 
-			const item = Reflect.get(app, attr);
-			if (item)
+			if (isObject(item))
 				return new Proxy(item, new TinyAlRenderer(app));
 			return item;
 		}
