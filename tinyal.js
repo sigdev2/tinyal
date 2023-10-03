@@ -31,7 +31,11 @@
 
 	function isPlainObject(value) {
 		return isObject(value) && value.constructor === Object;
-	  }
+	}
+
+	function isFunction(value) {
+		return typeof value === 'function';
+	}
 
 	function getrx(rx) {
 		rx.lastIndex = 0;
@@ -351,12 +355,8 @@
 			return 0;
 		}
 	}
-	
-	const staticArrayMethods = new Set('pop', 'push', 'shift', 'unshift', 'splice', 'reverse', 'sort');
 
 	class TinyAlRenderer {
-		
-		#methods = new Set();
 		#target = null;
 
 		#targetRender(app) {
@@ -366,16 +366,15 @@
 				app.render();
 		}
 
-		constructor(methods, target) {
-			if (methods)
-			    this.#methods = methods;
+		constructor(target) {
 			if (target)
 				this.#target = target;
 		}
 
 		set(app, attr, value) {
-			if (attr.startsWith('_'))
+			if (!attr.startsWith('$'))
 			    return Reflect.set(app, attr, value);
+			attr = attr.substring(1);
 			const oldvalue = Reflect.get(app, attr);
 			if (oldvalue == value)
 			    return true;
@@ -386,10 +385,11 @@
 		}
 
 		get(app, attr) {
-			if (attr.startsWith('_'))
+			if (!attr.startsWith('$'))
 			    return Reflect.get(app, attr);
+			attr = attr.substring(1);
 			const self = this;
-            if (attr in this.#methods) {
+            if (isFunction(attr)) {
 				return function() {
 					const result = Reflect.get(app, attr).apply(app, arguments);
 					self.#targetRender(app);
@@ -398,22 +398,17 @@
 			}
 
 			const item = Reflect.get(app, attr);
-			if (item) {
-				if (item.constructor.name === 'Object')
-					return new Proxy(item, new TinyAlRenderer(null, app));
-				if (item.constructor.name === 'Array')
-					return new Proxy(item, new TinyAlRenderer(staticArrayMethods, app));
-			}
+			if (item)
+				return new Proxy(item, new TinyAlRenderer(app));
 			return item;
 		}
 	}
 
 	class TinyAlReadOnlyProxy {
 		set(app, attr, value) {
-			if (attr.startsWith('_'))
-			    return Reflect.set(app, attr, value);
-            console.warn('Can\'t write to read only object!');
-			return false;
+			if (attr.startsWith('$'))
+                console.warn('Can\'t get attributes with rendering!');
+			return Reflect.set(app, attr, value);
 		}
 	}
 
@@ -658,14 +653,16 @@
 			    return;
 			}
 
-			this.#props.set(tag, simpleDeepClone(config));
-
 			let render = '';
 			let style = '';
 			let props = {};
 			let init = function() {};
 			let fps = DEFAULT_RENDER_TIMEOUT;
 			for (const [key, value] of Object.entries(config)) {
+				if (key.startsWith('$')) {
+					console.error('Component register error: for tag "' + tag + '" config can\'t containt property starts with \'$\' (' + key + ')!');
+					return;
+				}
 				if ((key == 'style' || key == 's' || key == 'css') && value.length > 0)
 				    style = value;
 				else if (key == 'ng' || key == 'rend' || key == 'render' || key == 'r' || key == 'html' || key == 'content')
@@ -677,6 +674,8 @@
 				else
 					props[key] = simpleDeepClone(value);
 			}
+
+			this.#props.set(tag, simpleDeepClone(config));
 
 			let template = document.createElement('template');
 			const hasContent = render.length > 0;
