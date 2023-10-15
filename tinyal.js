@@ -396,8 +396,17 @@
             if (isFunction(value)) {
 				return function() {
 					const result = value.apply(app, arguments);
+					if (!!result && result.then) {
+						return new Promise(function (resolve) {
+							result.then(function () {
+								resolve(...arguments);
+								self.#targetRender(app);
+							});
+						});
+					}
+
 					self.#targetRender(app);
-                    return result;
+					return result;
 				}
 			}
 
