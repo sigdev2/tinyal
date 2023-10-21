@@ -67,7 +67,7 @@
 				copy.push(simpleDeepClone(subValue, stack));
 			});
 		} else if (obj.constructor === Object) {
-			Object.setPrototypeOf(copy, Object.getPrototypeOf(obj));
+			Object.setPrototypeOf(copy, simpleDeepClone(Object.getPrototypeOf(obj)));
 			for (const key in obj)
 				if (obj.hasOwnProperty(key))
 					copy[key] = simpleDeepClone(obj[key], stack);
@@ -99,12 +99,6 @@
 				});
 			}
 		}
-	}
-
-	function uuidv4() {
-		return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-		  (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-		);
 	}
 
 	function getProperty(obj, path) {
@@ -360,7 +354,7 @@
 		#target = null;
 
 		#targetRender(app) {
-			if (this.#target)
+			if (this.#target !== null)
 				this.#target.render();
 			else
 				app.render();
@@ -372,9 +366,6 @@
 		}
 
 		set(app, attr, value) {
-			if (!attr.startsWith('$'))
-			    return Reflect.set(app, attr, value);
-			attr = attr.substring(1);
 			const oldvalue = Reflect.get(app, attr);
 			if (oldvalue == value)
 			    return true;
@@ -385,9 +376,6 @@
 		}
 
 		get(app, attr) {
-			if (!attr.startsWith('$'))
-			    return Reflect.get(app, attr);
-			attr = attr.substring(1);
 			const value = Reflect.get(app, attr);
 			if (!value)
 			    return value;
@@ -396,7 +384,7 @@
             if (isFunction(value)) {
 				return function() {
 					const result = value.apply(app, arguments);
-					if (!!result && result.then) {
+					if (isObject(result) && isFunction(result.then)) {
 						return new Promise(function (resolve) {
 							result.then(function () {
 								resolve(...arguments);
@@ -417,15 +405,16 @@
 	}
 
 	class TinyAlReadOnlyProxy {
-		set(app, attr, value) {
-			if (attr.startsWith('$'))
-                console.warn('Can\'t get attributes with rendering!');
-			return Reflect.set(app, attr, value);
+		get(app, attr) {
+			if (attr == 'render' || attr == 'setState' || attr == 'getState')
+                console.error('Can\'t rendering in template!');
+			return Reflect.get(app, attr);
 		}
 	}
 
 	const staticRenderer = new TinyAlRenderer();
 	const staticReadOnly = new TinyAlReadOnlyProxy();
+	const nullPrototype = Object.getPrototypeOf({});
 
 	class TinyAlTemplateNode {
         #children = [];
@@ -469,8 +458,7 @@
 			} else {
 			    this.#nodeName = element.name;
 
-				const bindContext = (this.#object instanceof TinyAlApp ? new Proxy(this.#object, staticRenderer) : this.#object);
-				bindEvents(bindContext, element);
+				bindEvents(this.#object, element);
 
 				if (element.hasAttribute(DIRECTIVE_SHOW)) {
 					this.#modifyers.push(showExpressionFunc(this.#object, element.getAttribute(DIRECTIVE_SHOW), element));
@@ -578,19 +566,13 @@
 		#lastRenderTime = 0;
 		#renderTimeout = DEFAULT_RENDER_TIMEOUT;
 		#renderQueue = false;
-		#appId = '';
 
-	    constructor(appId, element, props, fps) {
-			this.#appId = appId;
+	    constructor(element, fps) {
             this.#element = element;
 			this.#renderTimeout = fps;
-			Object.assign(this, props);
 			
 			const self = this;
 
-			this.appId = function() {
-				return self.#appId;
-			}
 
 			this.setRenderTimeout = function(timeout) {
 				self.#renderTimeout = timeout;
@@ -598,10 +580,6 @@
 
 			this.element = function() {
 				return self.#element;
-			}
-
-			this.template = function() {
-				return self.#template;
 			}
 
 			this.render = function() {
@@ -621,29 +599,39 @@
 					}
 				}
 			}
+
+			this.setState = function() {
+				if (isPlainObject(self.state)) {
+					if (arguments.length == 1) {
+					    if (isPlainObject(arguments[0]))
+						    Object.assign(self.state, arguments[0]);
+					} else if (arguments.length == 2) {
+						self.state[arguments[0]] = arguments[1];
+					}
+				} else {
+					if (arguments.length == 1) {
+						self.state = arguments[0];
+					} else if (arguments.length == 2) {
+						const key = arguments[0];
+						self.state = { key : arguments[1] };
+					}
+				}
+				self.render();
+			}
+			
+			this.getState = function() {
+				return new Proxy(self, staticRenderer);
+			}
 			
 			this.#template = new TinyAlTemplateNode(this, this.#element);
 		}
 	}
 
 	class TinyAl {
-        #apps = new Map();
         #props = new Map();
 
-		#gnerateAppId() {
-			let appId = null
-			do {
-				appId = uuidv4();
-			} while(this.#apps.has(name));
-			return appId;
-		}
-
-		get(appId) {
-			return this.#apps.get(appId);
-		}
-
-		add(tag, config) {
-			if (!tag || arguments.length < 2) {
+		#add(tag, config, cloned) {
+			if (!tag) {
 				console.error('Component register error: tag is not specified!');
 			    return;
 			}
@@ -665,17 +653,18 @@
 			    return;
 			}
 
+			let source = (cloned ? config : simpleDeepClone(config));
+			if (!Object.isFrozen(source))
+			    Object.freeze(source);
+			this.#props.set(tag, source);
+
 			let render = '';
 			let style = '';
 			let props = {};
 			let init = function() {};
 			let fps = DEFAULT_RENDER_TIMEOUT;
-			for (const [key, value] of Object.entries(config)) {
-				if (key.startsWith('$')) {
-					console.error('Component register error: for tag "' + tag + '" config can\'t containt property starts with \'$\' (' + key + ')!');
-					return;
-				}
-				if ((key == 'style' || key == 's' || key == 'css') && value.length > 0)
+			for (const [key, value] of Object.entries(source)) {
+				if ((key == 'style' || key == 's' || key == 'css') && !!value)
 				    style = value;
 				else if (key == 'ng' || key == 'rend' || key == 'render' || key == 'r' || key == 'html' || key == 'content')
 					render = value;
@@ -687,23 +676,17 @@
 					props[key] = simpleDeepClone(value);
 			}
 
-			this.#props.set(tag, simpleDeepClone(config));
-
 			let template = document.createElement('template');
-			const hasContent = render.length > 0;
-			if (hasContent || style.length > 0)
+			const hasContent = !!render;
+			if (hasContent || !!style)
 				template.innerHTML = '<style>' + (hasContent ? getStyles() : '') + style + '</style>' + render;
 
 			const creator = this;
 			customElements.define(tag, class extends HTMLElement {
-				#appId = null;
-
-				appId() {
-					return this.#appId;
-				}
+				#app = null;
 
 				app() {
-					return creator.get(this.#appId);
+					return this.#app;
 				}
 		
 				connectedCallback() {
@@ -713,16 +696,15 @@
 					const shadowRoot = this.attachShadow({mode: 'closed'});
 					shadowRoot.innerHTML = template.innerHTML;
 
-					this.#appId = creator.#gnerateAppId();
-
-					const app = new TinyAlApp(this.#appId, shadowRoot, simpleDeepClone(props), fps);
-					init.apply(app);
+					this.#app = new TinyAlApp(shadowRoot, fps);
+					Object.setPrototypeOf(this.#app, props);
+					init.apply(this.#app);
 	
 					if (this.hasAttribute(DIRECTIVE_INIT)) {
 						const code = this.getAttribute(DIRECTIVE_INIT);
 						this.removeAttribute(DIRECTIVE_INIT);
 						try {
-							evalExpressionFunc(code).apply(app);
+							evalExpressionFunc(code).apply(this.#app);
 						} catch(e) {
 							console.warn(e.message);
 						}
@@ -731,29 +713,36 @@
 					if (this.hasAttribute(DIRECTIVE_FPS)) {
 						const renderTime = parseFps(this.getAttribute(DIRECTIVE_FPS));
 						this.removeAttribute(DIRECTIVE_FPS);
-						app.setRenderTimeout(renderTime);
+						this.#app.setRenderTimeout(renderTime);
 					}
-					
-					creator.#apps.set(this.#appId, new Proxy(app, staticRenderer));
 
-					app.render();
+					this.#app.render();
 
 					this.style.display = oldDisplay;
 				}
 		
 				disconnectedCallback() {
-					creator.#apps.delete(this.#appId);
+					this.#app = null;
 				}
 			});
 		}
+		
+		add(tag, config) {
+			this.#add(tag, config, false);
+		}
 
-		extends(tag, parent, config) {
-			if (!parent || arguments.length < 3) {
-				console.error('Component register error: tag "' + tag + '" can\'t extends not specified parent tag!');
-			    return;
+		extends(tag, parent, config = null) {
+			if (config !== undefined && config !== null && !isPlainObject(config)) {
+				console.error('Component register error: for tag "' + tag + '" config is not object!');
+				return;
 			}
 
 			if (!isPlainObject(parent)) {
+				if (!parent) {
+					console.error('Component register error: tag "' + tag + '" can\'t extends not specified parent tag!');
+					return;
+				}
+
 				parent = parent.toLowerCase();
 				
 				if (!this.#props.has(parent)) {
@@ -761,18 +750,21 @@
 					return;
 				}
 
-				if (!isPlainObject(config)) {
-					console.error('Component register error: for tag "' + tag + '" config is not object!');
-					return;
-				}
-
 				parent = this.#props.get(parent);
 			}
 
-			let actual = {};
-			Object.assign(actual, simpleDeepClone(parent));
-			Object.assign(actual, config);
-            this.add(tag, actual);
+			if (config === null || config === undefined) {
+				this.#add(tag, parent, true);
+				return;
+			}
+
+			const actual = simpleDeepClone(config);
+			let proto = actual;
+            while (proto != nullPrototype)
+				proto = Object.getPrototypeOf(proto);
+			Object.setPrototypeOf(proto, parent);
+
+            this.add(tag, actual, true);
 		}
 	}
 
