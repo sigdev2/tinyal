@@ -601,21 +601,21 @@
 			}
 
 			this.setState = function() {
-				if (isPlainObject(self.state)) {
-					if (arguments.length == 1) {
-					    if (isPlainObject(arguments[0]))
-						    Object.assign(self.state, arguments[0]);
-					} else if (arguments.length == 2) {
-						self.state[arguments[0]] = arguments[1];
-					}
-				} else {
-					if (arguments.length == 1) {
-						self.state = arguments[0];
-					} else if (arguments.length == 2) {
-						const key = arguments[0];
-						self.state = { key : arguments[1] };
-					}
+				if (arguments.length == 1) {
+					const val = arguments[0];
+					if (isPlainObject(self.state) && isPlainObject(val))
+						Object.assign(self.state, val);
+					else
+						self.state = val;
+				} else if (arguments.length == 2) {
+					const key = arguments[0];
+					const val = arguments[1];
+					if (isPlainObject(self.state))
+						self.state[key] = val;
+					else
+						self.state = { key : val };
 				}
+				
 				self.render();
 			}
 			
