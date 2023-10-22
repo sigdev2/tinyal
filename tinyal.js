@@ -23,6 +23,8 @@
 	const FOR_VAR_NAME_RX = /^\s*(?:[A-z0-9_]+\s+)?(\[(?:[A-z0-9_\.]+\,?\s*)+\]|[_A-z0-9\.]+)(?:\s+in|\s+of|\s*;|\s*=|\s*$)/gm;
 
 	const DEFAULT_RENDER_TIMEOUT = 16; // 60 FPS
+	
+	const nullPrototype = Object.getPrototypeOf({});
 
 	function isObject(value) {
 		const type = typeof value;
@@ -46,12 +48,11 @@
 		if (!isObject(obj))
 		    return obj;
 
-		let copy = new obj.constructor();
-
 		stack || (stack = new Map);
 		const stacked = stack.get(obj);
 		if (stacked)
 			return stacked;
+		let copy = new obj.constructor();
 		stack.set(obj, copy);
 
 		if (obj.constructor === Set) {
@@ -67,16 +68,21 @@
 				copy.push(simpleDeepClone(subValue, stack));
 			});
 		} else if (obj.constructor === Object) {
-			Object.setPrototypeOf(copy, simpleDeepClone(Object.getPrototypeOf(obj)));
-			for (const key in obj)
-				if (obj.hasOwnProperty(key))
-					copy[key] = simpleDeepClone(obj[key], stack);
+			const proto = Object.getPrototypeOf(obj);
+			if (proto != null) {
+			    if (proto == nullPrototype)
+			        Object.setPrototypeOf(copy, nullPrototype);
+			    else
+			        Object.setPrototypeOf(copy, simpleDeepClone(proto, stack));
+			}
+			for (const [key, val] of Object.entries(obj))
+				copy[key] = simpleDeepClone(val, stack);
 		} else {
 			return obj;
 		}
 	  
 		return copy;
-	  }
+	}
 
 	function getStyles() {
         return '.ng-hide { display: none !important; } .ng-show { display: initial !important; }';
@@ -413,8 +419,9 @@
 	}
 
 	const staticRenderer = new TinyAlRenderer();
+	Object.freeze(staticRenderer);
 	const staticReadOnly = new TinyAlReadOnlyProxy();
-	const nullPrototype = Object.getPrototypeOf({});
+	Object.freeze(staticReadOnly);
 
 	class TinyAlTemplateNode {
         #children = [];
@@ -624,6 +631,7 @@
 			}
 			
 			this.#template = new TinyAlTemplateNode(this, this.#element);
+			Object.freeze(this.#template);
 		}
 	}
 
@@ -654,7 +662,7 @@
 			}
 
 			let source = (cloned ? config : simpleDeepClone(config));
-			if (!Object.isFrozen(source))
+            if (!Object.isFrozen(source))
 			    Object.freeze(source);
 			this.#props.set(tag, source);
 
@@ -663,7 +671,8 @@
 			let props = {};
 			let init = function() {};
 			let fps = DEFAULT_RENDER_TIMEOUT;
-			for (const [key, value] of Object.entries(source)) {
+			for (const key in source) {
+				const value = source[key];
 				if ((key == 'style' || key == 's' || key == 'css') && !!value)
 				    style = value;
 				else if (key == 'ng' || key == 'rend' || key == 'render' || key == 'r' || key == 'html' || key == 'content')
@@ -751,6 +760,8 @@
 				}
 
 				parent = this.#props.get(parent);
+			} else {
+				parent = simpleDeepClone(parent);
 			}
 
 			if (config === null || config === undefined) {
@@ -758,17 +769,24 @@
 				return;
 			}
 
+			const proto = Object.getPrototypeOf(config);
+            if (proto != null && proto != nullPrototype) {
+				console.error('Component register error: tag "' + tag + '" can\'t extends parent tag "' + parent + '", config already have parent!');
+				return;
+			}
+
 			const actual = simpleDeepClone(config);
-			let proto = actual;
-            while (proto != nullPrototype)
-				proto = Object.getPrototypeOf(proto);
-			Object.setPrototypeOf(proto, parent);
+			Object.setPrototypeOf(actual, parent);
 
 			if (isPlainObject(parent.state)) {
 				if (!actual.hasOwnProperty('state'))
 				    actual.state = {};
-				if (isPlainObject(actual.state))
+				if (isPlainObject(actual.state)) {
+					const stateProto = Object.getPrototypeOf(actual.state);
+					if (stateProto != null && stateProto != nullPrototype)
+						console.warn('State prototype of tag "' + tag + '" will be override from state of parent tag "' + parent + '"!');
 				    Object.setPrototypeOf(actual.state, parent.state);
+				}
 			}
 
             this.add(tag, actual, true);
@@ -776,6 +794,7 @@
 	}
 
 	const staticTinyAl = new TinyAl();
+	Object.freeze(staticTinyAl);
 
 	if ('browser_module' in global) {
         global['browser_module'].export('tinyal', () => {
