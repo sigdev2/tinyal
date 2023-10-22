@@ -764,6 +764,13 @@
 				proto = Object.getPrototypeOf(proto);
 			Object.setPrototypeOf(proto, parent);
 
+			if (isPlainObject(parent.state)) {
+				if (!actual.hasOwnProperty('state'))
+				    actual.state = {};
+				if (isPlainObject(actual.state))
+				    Object.setPrototypeOf(actual.state, parent.state);
+			}
+
             this.add(tag, actual, true);
 		}
 	}
