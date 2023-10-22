@@ -580,7 +580,6 @@
 			
 			const self = this;
 
-
 			this.setRenderTimeout = function(timeout) {
 				self.#renderTimeout = timeout;
 			}
@@ -685,6 +684,8 @@
 					props[key] = simpleDeepClone(value);
 			}
 
+			Object.freeze(props);
+
 			let template = document.createElement('template');
 			const hasContent = !!render;
 			if (hasContent || !!style)
@@ -706,7 +707,7 @@
 					shadowRoot.innerHTML = template.innerHTML;
 
 					this.#app = new TinyAlApp(shadowRoot, fps);
-					Object.setPrototypeOf(this.#app, props);
+					Object.setPrototypeOf(this.#app, simpleDeepClone(props));
 					init.apply(this.#app);
 	
 					if (this.hasAttribute(DIRECTIVE_INIT)) {
